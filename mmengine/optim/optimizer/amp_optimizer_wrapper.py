@@ -123,6 +123,14 @@ class AmpOptimWrapper(OptimWrapper):
             kwargs: Keyword arguments passed to :meth:`torch.Tensor.backward`
         """
         self.loss_scaler.scale(loss).backward(**kwargs)
+        # change to FP16 for LiteDEKR training
+        # params: List[torch.Tensor] = []
+        # for param_group in self.optimizer.param_groups:
+        #     params.extend(param_group['params'])
+        # for param in params:
+        #     if param.grad is not None:
+        #         param.grad.data - param.grad.data.half()
+
         self._inner_count += 1
 
     def step(self, **kwargs):

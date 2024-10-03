@@ -16,6 +16,7 @@ import torch.nn as nn
 from torch.nn.parallel.distributed import DistributedDataParallel
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
+import torch.quantization as quantization
 
 import mmengine
 from mmengine.config import Config, ConfigDict
@@ -427,6 +428,19 @@ class Runner:
             # Merge the data_preprocessor to model config.
             model.setdefault('data_preprocessor', data_preprocessor)
         self.model = self.build_model(model)
+        # prepare for QAT
+        if self.cfg.get('QAT') == True:
+            self.model.qconfig = torch.quantization.get_default_qat_qconfig('qnnpack')
+            self.model = torch.quantization.prepare_qat(self.model, inplace=True)
+        # model_quantized = torch.quantization.convert(self.model.eval())
+        # checkpoint = {
+        #     'state_dict':
+        #     weights_to_cpu(model_quantized.state_dict()),
+        # }
+        # save_checkpoint(
+        #     checkpoint,
+        #     './int8.pth')
+
         # wrap model
         self.model = self.wrap_model(
             self.cfg.get('model_wrapper_cfg'), self.model)
@@ -2271,6 +2285,22 @@ class Runner:
         save_checkpoint(
             checkpoint,
             filepath,
+            file_client_args=file_client_args,
+            backend_args=backend_args)
+        if self.cfg.get('QAT') == True:
+            model_quantized = torch.quantization.convert(model.eval())
+            checkpoint = {
+            'meta':
+            meta,
+            'state_dict':
+            weights_to_cpu(model_quantized.state_dict()),
+            'message_hub':
+            apply_to(self.message_hub.state_dict(),
+                     lambda x: hasattr(x, 'cpu'), lambda x: x.cpu()),
+            }
+            save_checkpoint(
+            checkpoint,
+            filepath.split('.')[0] + '_int8.pth',
             file_client_args=file_client_args,
             backend_args=backend_args)
 
